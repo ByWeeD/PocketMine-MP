@@ -31,6 +31,7 @@ use pocketmine\block\BlockFactory;
 use pocketmine\entity\Arrow;
 use pocketmine\entity\Effect;
 use pocketmine\entity\Entity;
+use pocketmine\entity\FloatingText;
 use pocketmine\entity\Item as DroppedItem;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\event\block\BlockPlaceEvent;
@@ -1502,6 +1503,42 @@ class Level implements ChunkManager, Metadatable{
 			return $itemEntity;
 		}
 		return null;
+	}
+
+	/**
+	 * @param Vector3 $pos
+	 * @param string  $text
+	 * @param string  $title
+	 *
+	 * @return null|Entity
+	 */
+	public function addFloatingText(Vector3 $pos, string $text, string $title = ""){
+		$entity = Entity::createEntity("FloatingText", $this, new CompoundTag("", [
+			new ListTag("Pos", [
+				new DoubleTag("", $pos->x),
+				new DoubleTag("", $pos->y),
+				new DoubleTag("", $pos->z)
+			]),
+			new ListTag("Motion", [
+				new DoubleTag("", 0),
+				new DoubleTag("", 0),
+				new DoubleTag("", 0)
+			]),
+			new ListTag("Rotation", [
+				new FloatTag("", 0),
+				new FloatTag("", 0)
+			])
+		]));
+
+		assert($entity !== null);
+
+		if($entity instanceof FloatingText){
+			$entity->setTitle($title);
+			$entity->setText($text);
+		}
+
+		$entity->spawnToAll();
+		return $entity;
 	}
 
 	/**
