@@ -33,6 +33,8 @@ class MainLogger extends \AttachableThreadedLogger{
 	protected $logFile;
 	/** @var \Threaded */
 	protected $logStream;
+	/** @var \Threaded */
+	protected $outputBuffer;
 	/** @var bool */
 	protected $shutdown;
 	/** @var bool */
@@ -55,6 +57,7 @@ class MainLogger extends \AttachableThreadedLogger{
 		$this->logFile = $logFile;
 		$this->logDebug = $logDebug;
 		$this->logStream = new \Threaded;
+		$this->outputBuffer = new \Threaded();
 		$this->start();
 	}
 
@@ -210,9 +213,9 @@ class MainLogger extends \AttachableThreadedLogger{
 		$cleanMessage = TextFormat::clean($message);
 
 		if(!Terminal::hasFormattingCodes()){
-			echo $cleanMessage . PHP_EOL;
+			$this->pushToOutputBuffer($cleanMessage . PHP_EOL);
 		}else{
-			echo $message . PHP_EOL;
+			$this->pushToOutputBuffer($message . PHP_EOL);
 		}
 
 		foreach($this->attachments as $attachment){
@@ -224,13 +227,23 @@ class MainLogger extends \AttachableThreadedLogger{
 		$this->logStream[] = date("Y-m-d", $now) . " " . $cleanMessage . PHP_EOL;
 	}
 
+	public function pushToOutputBuffer(string $message) : void{
+		$this->outputBuffer[] = $message;
+	}
+
 	/**
+	 * Writes logging information to disk and echoes it to the console.
+	 *
 	 * @param resource $logResource
 	 */
-	private function writeLogStream($logResource){
+	private function process($logResource){
 		while($this->logStream->count() > 0){
 			$chunk = $this->logStream->shift();
 			fwrite($logResource, $chunk);
+		}
+
+		while($line = $this->outputBuffer->shift()){
+			echo $line;
 		}
 	}
 
@@ -242,13 +255,14 @@ class MainLogger extends \AttachableThreadedLogger{
 		}
 
 		while($this->shutdown === false){
-			$this->writeLogStream($logResource);
+			$this->process($logResource);
+
 			$this->synchronized(function(){
 				$this->wait(25000);
 			});
 		}
 
-		$this->writeLogStream($logResource);
+		$this->process($logResource);
 
 		fclose($logResource);
 	}
