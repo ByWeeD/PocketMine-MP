@@ -235,6 +235,10 @@ class MainLogger extends \AttachableThreadedLogger{
 		$this->outputBuffer[] = $message;
 	}
 
+	public function getOutputBufferContents() : array{
+		return (array) $this->outputBuffer;
+	}
+
 	public function syncFlushBuffer(){
 		$this->syncFlush = true;
 		$this->synchronized(function(){
@@ -245,6 +249,7 @@ class MainLogger extends \AttachableThreadedLogger{
 			}
 		});
 	}
+
 
 	/**
 	 * Writes logging information to disk and echoes it to the console.
