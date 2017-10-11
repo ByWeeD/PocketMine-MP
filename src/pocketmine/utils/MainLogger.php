@@ -41,6 +41,8 @@ class MainLogger extends \AttachableThreadedLogger{
 	protected $logDebug;
 	/** @var MainLogger */
 	public static $logger = null;
+	/** @var bool */
+	private $syncFlush = false;
 
 	/**
 	 * @param string $logFile
@@ -161,6 +163,8 @@ class MainLogger extends \AttachableThreadedLogger{
 		foreach(\pocketmine\getTrace(0, $trace) as $i => $line){
 			$this->debug($line, true);
 		}
+
+		$this->syncFlushBuffer();
 	}
 
 	public function log($level, $message){
@@ -231,6 +235,17 @@ class MainLogger extends \AttachableThreadedLogger{
 		$this->outputBuffer[] = $message;
 	}
 
+	public function syncFlushBuffer(){
+		$this->syncFlush = true;
+		$this->synchronized(function(){
+			$this->notify(); //write immediately
+
+			while($this->syncFlush){
+				$this->wait(); //block until it's all been written to disk
+			}
+		});
+	}
+
 	/**
 	 * Writes logging information to disk and echoes it to the console.
 	 *
@@ -244,6 +259,11 @@ class MainLogger extends \AttachableThreadedLogger{
 
 		while($line = $this->outputBuffer->shift()){
 			echo $line;
+		}
+
+		if($this->syncFlush){
+			$this->syncFlush = false;
+			$this->notify(); //if this was due to a sync flush, tell the caller to stop waiting
 		}
 	}
 

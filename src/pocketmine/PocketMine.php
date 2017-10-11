@@ -377,6 +377,8 @@ namespace pocketmine {
 	}
 
 	function kill($pid){
+		global $logger;
+		$logger->syncFlushBuffer();
 		switch(Utils::getOS()){
 			case "win":
 				exec("taskkill.exe /F /PID " . ((int) $pid) . " > NUL");
