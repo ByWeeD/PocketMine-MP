@@ -257,13 +257,13 @@ class MainLogger extends \AttachableThreadedLogger{
 	 * @param resource $logResource
 	 */
 	private function process($logResource){
+		while($line = $this->outputBuffer->shift()){
+			echo $line;
+		}
+
 		while($this->logStream->count() > 0){
 			$chunk = $this->logStream->shift();
 			fwrite($logResource, $chunk);
-		}
-
-		while($line = $this->outputBuffer->shift()){
-			echo $line;
 		}
 
 		if($this->syncFlush){
