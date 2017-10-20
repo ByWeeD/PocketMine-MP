@@ -29,11 +29,20 @@ class ServerKiller extends Thread{
 
 	public $time;
 
+	/** @var MainLogger */
+	private $logger;
+
 	public function __construct($time = 15){
 		$this->time = $time;
+
+		global $logger;
+		$this->logger = $logger;
 	}
 
 	public function run(){
+		global $logger;
+		$logger = $this->logger;
+
 		$start = time();
 		$this->synchronized(function(){
 			$this->wait($this->time * 1000000);
