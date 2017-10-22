@@ -65,7 +65,7 @@ class ExperienceOrb extends Entity{
 	}
 
 	/**
-	 * Splits the Returns an array of integers containing all orb sizes which can be used to drop the amount of XP into the world.
+	 * Splits the specified amount of XP into an array of acceptable XP orb sizes.
 	 *
 	 * @param int $amount
 	 *
@@ -114,7 +114,6 @@ class ExperienceOrb extends Entity{
 		}
 
 		$this->setXpValue($value);
-		//$this->setImmobile();
 	}
 
 	public function saveNBT(){
