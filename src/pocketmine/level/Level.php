@@ -1927,6 +1927,32 @@ class Level implements ChunkManager, Metadatable{
 		return $nearby;
 	}
 
+	public function getNearestPlayer(Vector3 $pos, float $maxDistance) : ?Player{
+		$minX = Math::floorFloat(($pos->x - $maxDistance) / 16);
+		$maxX = Math::ceilFloat(($pos->x + $maxDistance) / 16);
+		$minZ = Math::floorFloat(($pos->z - $maxDistance) / 16);
+		$maxZ = Math::ceilFloat(($pos->z + $maxDistance) / 16);
+
+		$currentTargetDistSq = $maxDistance ** 2;
+
+		/** @var Player|null $currentTarget */
+		$currentTarget = null;
+
+		for($x = $minX; $x <= $maxX; ++$x){
+			for($z = $minZ; $z <= $maxZ; ++$z){
+				foreach($this->getChunkPlayers($x, $z) as $player){
+					$distSq = $player->distanceSquared($pos);
+					if($distSq < $currentTargetDistSq){
+						$currentTargetDistSq = $distSq;
+						$currentTarget = $player;
+					}
+				}
+			}
+		}
+
+		return $currentTarget;
+	}
+
 	/**
 	 * Returns a list of the Tile entities in this level
 	 *

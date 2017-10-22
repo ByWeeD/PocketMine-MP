@@ -32,6 +32,7 @@ use pocketmine\inventory\PlayerInventory;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item as ItemItem;
 use pocketmine\level\Level;
+use pocketmine\math\Math;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
@@ -39,6 +40,7 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\mcpe\protocol\AddPlayerPacket;
+use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
 use pocketmine\Player;
 use pocketmine\utils\UUID;
@@ -70,6 +72,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 
 	protected $totalXp = 0;
 	protected $xpSeed;
+	protected $xpCooldown = 0;
 
 	protected $baseOffset = 1.62;
 
@@ -261,42 +264,158 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $ev->getAmount();
 	}
 
+	/**
+	 * Returns the player's experience level.
+	 * @return int
+	 */
 	public function getXpLevel() : int{
 		return (int) $this->attributeMap->getAttribute(Attribute::EXPERIENCE_LEVEL)->getValue();
 	}
 
+	/**
+	 * Sets the player's experience level directly. This does not update their total XP or their XP progress.
+	 * @param int $level
+	 */
 	public function setXpLevel(int $level){
 		$this->attributeMap->getAttribute(Attribute::EXPERIENCE_LEVEL)->setValue($level);
 	}
 
+	/**
+	 * Returns a value between 0.0 and 1.0 to indicate how far through the current level the player is.
+	 * @return float
+	 */
 	public function getXpProgress() : float{
 		return $this->attributeMap->getAttribute(Attribute::EXPERIENCE)->getValue();
 	}
 
+	/**
+	 * Sets the player's progress through the current level to a value between 0.0 and 1.0.
+	 * @param float $progress
+	 */
 	public function setXpProgress(float $progress){
 		$this->attributeMap->getAttribute(Attribute::EXPERIENCE)->setValue($progress);
 	}
 
+	/**
+	 * Returns the total XP the player has collected in their lifetime. Resets when the player dies.
+	 * @return int
+	 */
 	public function getTotalXp() : int{
 		return $this->totalXp;
 	}
 
+	/**
+	 * Sets the total XP of the player, recalculating their XP level and progress.
+	 * @param int $amount
+	 */
+	public function setTotalXp(int $amount) : void{
+		if($amount < 0){
+			throw new \InvalidArgumentException("XP must be greater than 0");
+		}
+
+		$this->totalXp = $amount;
+		$newLevel = self::getLevelFromXp($this->totalXp);
+
+		$this->setXpLevel($newLevel);
+		$this->setXpProgress(($amount - self::getXpToReachLevel($newLevel)) / self::getXpToCompleteLevel($newLevel));
+	}
+
+	/**
+	 * Returns the number of XP points the player has progressed into their current level.
+	 * @return int
+	 */
 	public function getRemainderXp() : int{
-		return $this->getTotalXp() - self::getTotalXpForLevel($this->getXpLevel());
+		return $this->getTotalXp() - self::getXpToReachLevel($this->getXpLevel());
 	}
 
-	public function recalculateXpProgress() : float{
-		$this->setXpProgress($progress = $this->getRemainderXp() / self::getTotalXpForLevel($this->getXpLevel()));
-		return $progress;
+	/**
+	 * Adds an amount of XP to the player, recalculating their XP level and progress.
+	 *
+	 * @param int  $amount
+	 */
+	public function addXp(int $amount) : void{
+		$this->setTotalXp($this->totalXp + $amount);
 	}
 
-	public static function getTotalXpForLevel(int $level) : int{
+	/**
+	 * Takes an amount of XP from the player, recalculating their XP level and progress.
+	 * @param int $amount
+	 */
+	public function subtractXp(int $amount) : void{
+		$this->setTotalXp($this->totalXp - $amount);
+	}
+
+	/**
+	 * Returns whether the human can pickup XP orbs (checks cooldown time)
+	 * @return bool
+	 */
+	public function canPickupXp() : bool{
+		return $this->xpCooldown === 0;
+	}
+
+	/**
+	 * Sets the duration in ticks until the human can pick up another XP orb.
+	 * @param int $value
+	 */
+	public function resetXpCooldown(int $value = 2){
+		$this->xpCooldown = $value;
+	}
+
+	/**
+	 * Calculates and returns the amount of XP needed to get from level 0 to level $level
+	 *
+	 * @param int $level
+	 * @return int
+	 */
+	public static function getXpToReachLevel(int $level) : int{
 		if($level <= 16){
 			return $level ** 2 + $level * 6;
 		}elseif($level < 32){
-			return $level ** 2 * 2.5 - 40.5 * $level + 360;
+			return (int) ($level ** 2 * 2.5 - 40.5 * $level + 360);
 		}
-		return $level ** 2 * 4.5 - 162.5 * $level + 2220;
+		return (int) ($level ** 2 * 4.5 - 162.5 * $level + 2220);
+	}
+
+	/**
+	 * Returns the amount of XP needed to reach $level + 1.
+	 *
+	 * @param int $level
+	 *
+	 * @return int
+	 */
+	public static function getXpToCompleteLevel(int $level) : int{
+		if($level <= 16){
+			return 2 * $level + 7;
+		}elseif($level < 32){
+			return 5 * $level - 38;
+		}else{
+			return 9 * $level - 158;
+		}
+	}
+
+	/**
+	 * Calculates and returns the number of XP levels the specified amount of XP points are worth.
+	 *
+	 * @param int $xp
+	 * @return int
+	 */
+	public static function getLevelFromXp(int $xp) : int{
+		if($xp <= self::getXpToReachLevel(16)){
+			$a = 1;
+			$b = 6;
+			$c = 0;
+		}elseif($xp <= self::getXpToReachLevel(31)){
+			$a = 2.5;
+			$b = -40.5;
+			$c = 360;
+		}else{
+			$a = 4.5;
+			$b = -162.5;
+			$c = 2220;
+		}
+
+		$x = Math::solveQuadratic($a, $b, $c - $xp);
+		return (int) max($x); //we're only interested in the positive solution
 	}
 
 	public function getInventory(){
@@ -411,6 +530,10 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		$hasUpdate = parent::entityBaseTick($tickDiff);
 
 		$this->doFoodTick($tickDiff);
+
+		if($this->xpCooldown > 0){
+			$this->xpCooldown--;
+		}
 
 		return $hasUpdate;
 	}

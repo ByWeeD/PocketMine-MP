@@ -38,4 +38,26 @@ abstract class Math{
 		$i = (int) ($n + 1);
 		return $n >= $i ? $i : $i - 1;
 	}
+
+	/**
+	 * Solves a quadratic equation with the given coefficients and returns an array of up to two solutions.
+	 *
+	 * @param float $a
+	 * @param float $b
+	 * @param float $c
+	 *
+	 * @return float[]
+	 */
+	public static function solveQuadratic(float $a, float $b, float $c): array{
+		$sqrtDiscriminant = sqrt($b ** 2 - 4 * $a * $c);
+		$x = [
+			(-$b + $sqrtDiscriminant) / (2 * $a),
+			(-$b - $sqrtDiscriminant) / (2 * $a)
+		];
+
+		if($x[0] == $x[1]){
+			unset($x[1]);
+		}
+		return $x;
+	}
 }
