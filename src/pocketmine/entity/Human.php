@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\entity;
 
 use pocketmine\entity\projectile\ProjectileSource;
+use pocketmine\entity\utils\ExperienceUtils;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityRegainHealthEvent;
 use pocketmine\event\player\PlayerExhaustEvent;
@@ -32,7 +33,6 @@ use pocketmine\inventory\PlayerInventory;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item as ItemItem;
 use pocketmine\level\Level;
-use pocketmine\math\Math;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
@@ -40,7 +40,6 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\mcpe\protocol\AddPlayerPacket;
-use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
 use pocketmine\Player;
 use pocketmine\utils\UUID;
@@ -264,6 +263,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $ev->getAmount();
 	}
 
+
 	/**
 	 * Returns the player's experience level.
 	 * @return int
@@ -273,11 +273,27 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	}
 
 	/**
-	 * Sets the player's experience level directly. This does not update their total XP or their XP progress.
+	 * Sets the player's experience level. This does not affect their total XP or their XP progress.
 	 * @param int $level
 	 */
 	public function setXpLevel(int $level){
 		$this->attributeMap->getAttribute(Attribute::EXPERIENCE_LEVEL)->setValue($level);
+	}
+
+	/**
+	 * Adds a number of XP levels to the player.
+	 * @param int $amount
+	 */
+	public function addXpLevels(int $amount) : void{
+		$this->setXpLevel($this->getXpLevel() + $amount);
+	}
+
+	/**
+	 * Subtracts a number of XP levels from the player.
+	 * @param int $amount
+	 */
+	public function subtractXpLevels(int $amount) : void{
+		$this->setXpLevel($this->getXpLevel() - $amount);
 	}
 
 	/**
@@ -297,44 +313,46 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	}
 
 	/**
-	 * Returns the total XP the player has collected in their lifetime. Resets when the player dies.
-	 * @return int
-	 */
-	public function getTotalXp() : int{
-		return $this->totalXp;
-	}
-
-	/**
-	 * Sets the total XP of the player, recalculating their XP level and progress.
-	 * @param int $amount
-	 */
-	public function setTotalXp(int $amount) : void{
-		if($amount < 0){
-			throw new \InvalidArgumentException("XP must be greater than 0");
-		}
-
-		$this->totalXp = $amount;
-		$newLevel = self::getLevelFromXp($this->totalXp);
-
-		$this->setXpLevel($newLevel);
-		$this->setXpProgress(($amount - self::getXpToReachLevel($newLevel)) / self::getXpToCompleteLevel($newLevel));
-	}
-
-	/**
 	 * Returns the number of XP points the player has progressed into their current level.
 	 * @return int
 	 */
 	public function getRemainderXp() : int{
-		return (int) (self::getXpToCompleteLevel($this->getXpLevel()) * $this->getXpProgress());
+		return (int) (ExperienceUtils::getXpToCompleteLevel($this->getXpLevel()) * $this->getXpProgress());
 	}
 
 	/**
-	 * Adds an amount of XP to the player, recalculating their XP level and progress.
+	 * Returns the amount of XP points the player currently has, calculated from their current level and progress
+	 * through their current level. This will be reduced by enchanting deducting levels and is used to calculate the
+	 * amount of XP the player drops on death.
 	 *
-	 * @param int  $amount
+	 * @return int
+	 */
+	public function getCurrentTotalXp() : int{
+		return ExperienceUtils::getXpToReachLevel($this->getXpLevel()) + $this->getRemainderXp();
+	}
+
+	/**
+	 * Sets the current total of XP the player has, recalculating their XP level and progress.
+	 * Note that this DOES NOT update the player's lifetime total XP.
+	 *
+	 * @param int $amount
+	 */
+	public function setCurrentTotalXp(int $amount) : void{
+		$newLevel = ExperienceUtils::getLevelFromXp($amount);
+
+		$this->setXpLevel($newLevel);
+		$this->setXpProgress(($amount - ExperienceUtils::getXpToReachLevel($newLevel)) / ExperienceUtils::getXpToCompleteLevel($newLevel));
+	}
+
+	/**
+	 * Adds an amount of XP to the player, recalculating their XP level and progress. XP amount will be added to the
+	 * player's lifetime XP.
+	 *
+	 * @param int $amount
 	 */
 	public function addXp(int $amount) : void{
-		$this->setTotalXp($this->totalXp + $amount);
+		$this->totalXp += $amount;
+		$this->setCurrentTotalXp($this->getCurrentTotalXp() + $amount);
 	}
 
 	/**
@@ -342,7 +360,31 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	 * @param int $amount
 	 */
 	public function subtractXp(int $amount) : void{
-		$this->setTotalXp($this->totalXp - $amount);
+		$this->addXp(-$amount);
+	}
+
+	/**
+	 * Returns the total XP the player has collected in their lifetime. Resets when the player dies.
+	 * XP levels being removed in enchanting do not reduce this number.
+	 *
+	 * @return int
+	 */
+	public function getLifetimeTotalXp() : int{
+		return $this->totalXp;
+	}
+
+	/**
+	 * Sets the lifetime total XP of the player. This does not recalculate their level or progress. Used for player
+	 * score when they die. (TODO: add this when MCPE supports it)
+	 *
+	 * @param int $amount
+	 */
+	public function setLifetimeTotalXp(int $amount) : void{
+		if($amount < 0){
+			throw new \InvalidArgumentException("XP must be greater than 0");
+		}
+
+		$this->totalXp = $amount;
 	}
 
 	/**
@@ -361,62 +403,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		$this->xpCooldown = $value;
 	}
 
-	/**
-	 * Calculates and returns the amount of XP needed to get from level 0 to level $level
-	 *
-	 * @param int $level
-	 * @return int
-	 */
-	public static function getXpToReachLevel(int $level) : int{
-		if($level <= 16){
-			return $level ** 2 + $level * 6;
-		}elseif($level < 32){
-			return (int) ($level ** 2 * 2.5 - 40.5 * $level + 360);
-		}
-		return (int) ($level ** 2 * 4.5 - 162.5 * $level + 2220);
-	}
-
-	/**
-	 * Returns the amount of XP needed to reach $level + 1.
-	 *
-	 * @param int $level
-	 *
-	 * @return int
-	 */
-	public static function getXpToCompleteLevel(int $level) : int{
-		if($level <= 16){
-			return 2 * $level + 7;
-		}elseif($level < 32){
-			return 5 * $level - 38;
-		}else{
-			return 9 * $level - 158;
-		}
-	}
-
-	/**
-	 * Calculates and returns the number of XP levels the specified amount of XP points are worth.
-	 *
-	 * @param int $xp
-	 * @return int
-	 */
-	public static function getLevelFromXp(int $xp) : int{
-		if($xp <= self::getXpToReachLevel(16)){
-			$a = 1;
-			$b = 6;
-			$c = 0;
-		}elseif($xp <= self::getXpToReachLevel(31)){
-			$a = 2.5;
-			$b = -40.5;
-			$c = 360;
-		}else{
-			$a = 4.5;
-			$b = -162.5;
-			$c = 2220;
-		}
-
-		$x = Math::solveQuadratic($a, $b, $c - $xp);
-		return (int) max($x); //we're only interested in the positive solution
-	}
 
 	public function getInventory(){
 		return $this->inventory;

@@ -27,7 +27,6 @@ use pocketmine\entity\Entity;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
-use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\Player;
 
 class ExperienceOrb extends Entity{
@@ -198,13 +197,8 @@ class ExperienceOrb extends Entity{
 			if($currentTarget->canPickupXp() and $this->boundingBox->intersectsWith($currentTarget->getBoundingBox())){
 				$this->kill();
 
-				$oldLevel = $currentTarget->getXpLevel();
 				$currentTarget->addXp($this->getXpValue());
-				if($currentTarget->getXpLevel() !== $oldLevel){
-					$this->level->broadcastLevelSoundEvent($this, LevelSoundEventPacket::SOUND_LEVELUP);
-				}else{
-					$this->level->broadcastLevelEvent($this, LevelEventPacket::EVENT_SOUND_ORB, mt_rand());
-				}
+				$this->level->broadcastLevelEvent($this, LevelEventPacket::EVENT_SOUND_ORB, mt_rand());
 				$currentTarget->resetXpCooldown();
 
 				//TODO: check Mending enchantment
