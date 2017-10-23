@@ -31,6 +31,7 @@ use pocketmine\block\BlockFactory;
 use pocketmine\entity\Effect;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Item as DroppedItem;
+use pocketmine\entity\object\ExperienceOrb;
 use pocketmine\entity\projectile\Arrow;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\event\block\BlockPlaceEvent;
@@ -1574,6 +1575,32 @@ class Level implements ChunkManager, Metadatable{
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Drops XP orbs into the world for the specified amount, splitting the amount into several orbs if necessary.
+	 *
+	 * @param Vector3 $pos
+	 * @param int     $amount
+	 *
+	 * @return ExperienceOrb[]
+	 */
+	public function dropExperience(Vector3 $pos, int $amount) : array{
+		/** @var ExperienceOrb[] $orbs */
+		$orbs = [];
+
+		foreach(ExperienceOrb::splitIntoOrbSizes($amount) as $split){
+			$orb = Entity::createEntity("XPOrb", $this, Entity::createBaseNBT($pos, $this->temporalVector->setComponents((lcg_value() * 0.2 - 0.1) * 2, lcg_value() * 0.4, (lcg_value() * 0.2 - 0.1) * 2), lcg_value() * 360, 0));
+
+			if($orb instanceof ExperienceOrb){
+				$orb->setXpValue($split);
+				$orb->spawnToAll();
+
+				$orbs[] = $orb;
+			}
+		}
+
+		return $orbs;
 	}
 
 	/**
