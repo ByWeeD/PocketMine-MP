@@ -137,6 +137,7 @@ class AvailableCommandsPacket extends DataPacket{
 	protected function putEnum(CommandEnum $enum){
 		$this->putString($enum->enumName);
 
+		$this->putUnsignedVarInt(count($enum->enumValues));
 		foreach($enum->enumValues as $value){
 			//Dumb bruteforce search. I hate this packet.
 			$index = array_search($value, $this->enumValues, true);
@@ -213,8 +214,10 @@ class AvailableCommandsPacket extends DataPacket{
 			$this->putLInt(-1);
 		}
 
+		$this->putUnsignedVarInt(count($data->overloads));
 		foreach($data->overloads as $overload){
 			/** @var CommandParameter[] $overload */
+			$this->putUnsignedVarInt(count($overload));
 			foreach($overload as $parameter){
 				$this->putString($parameter->paramName);
 
@@ -310,7 +313,7 @@ class AvailableCommandsPacket extends DataPacket{
 		}
 
 		$this->enumValues = array_keys($enumValuesMap);
-		$this->putUnsignedVarInt(count($this->enumValues));
+		$this->putUnsignedVarInt($this->enumValuesCount = count($this->enumValues));
 		foreach($this->enumValues as $enumValue){
 			$this->putString($enumValue);
 		}
@@ -323,10 +326,12 @@ class AvailableCommandsPacket extends DataPacket{
 
 		$this->enums = array_values($enumMap);
 		$this->enumMap = array_flip(array_keys($enumMap));
+		$this->putUnsignedVarInt(count($this->enums));
 		foreach($this->enums as $enum){
 			$this->putEnum($enum);
 		}
 
+		$this->putUnsignedVarInt(count($this->commandData));
 		foreach($this->commandData as $data){
 			$this->putCommandData($data);
 		}
