@@ -223,7 +223,7 @@ class AvailableCommandsPacket extends DataPacket{
 				}elseif($parameter->postfix !== null){
 					$key = array_search($parameter->postfix, $this->postfixes, true);
 					if($key === false){
-						throw new \InvalidStateException("Postfix '$this->postfixes' not in postfixes array");
+						throw new \InvalidStateException("Postfix '$parameter->postfix' not in postfixes array");
 					}
 					$type = $parameter->paramType << 24 | $key;
 				}else{
